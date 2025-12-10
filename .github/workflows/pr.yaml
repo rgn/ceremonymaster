@@ -1,0 +1,16 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v6
+      - run: go mod tidy
+      - run: go fmt ./...
+      - run: go vet ./...
+      - run: go test ./... -cover
