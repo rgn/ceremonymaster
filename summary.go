@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
-	"log"
 	"math"
 	"os"
 	"path"
@@ -38,7 +36,6 @@ func (m *Model) InitSummaryModel() {
 	columns := []table.Column{
 		{Title: "Bewertungsparameter", Width: 30},
 		{Title: "Ø", Width: 8},
-		{Title: "Sum", Width: 8},
 		{Title: "Min", Width: 8},
 		{Title: "Max", Width: 8},
 	}
@@ -143,7 +140,6 @@ func (m *Model) UpdateSummaryModel(msg tea.Msg) []tea.Cmd {
 		rows = append(rows, table.Row{
 			groupTitle,
 			fmt.Sprintf("%.2f", summary[AVG]),
-			fmt.Sprintf("%.0f", summary[SUM]),
 			fmt.Sprintf("%.0f", summary[MIN]),
 			fmt.Sprintf("%.0f", summary[MAX]),
 		})
@@ -189,7 +185,7 @@ func (m *Model) CreateCertificate() {
 	}
 
 	certificate := Certificate{
-		id:         uuid.New(),
+		ID:         uuid.New(),
 		Date:       time.Now(),
 		Applicant:  m.applicantName,
 		ObjectName: m.objectName,
@@ -266,44 +262,9 @@ func (m *Model) CreateCertificate() {
 	}
 
 	currentPath := path.Join(getCertificatesPath(), certificate.Date.Format("2006"), certificate.Date.Format("01"))
-	currentCertificatePath := path.Join(currentPath, certificate.id.String()+".yaml")
-	currentImagePath := path.Join(currentPath, certificate.id.String()+path.Ext(m.objectImage))
+	currentCertificatePath := path.Join(currentPath, certificate.ID.String()+".yaml")
 
 	os.MkdirAll(currentPath, os.ModePerm)
 
 	saveCertificate(currentCertificatePath, certificate)
-
-	if _, err := os.Stat(m.objectImage); err == nil && currentImagePath != "" {
-
-		fin, err := os.Open(m.objectImage)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		defer fin.Close()
-
-		fout, err := os.Create(currentImagePath)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		defer fout.Close()
-
-		buf := make([]byte, 1024)
-		for {
-
-			n, err := fin.Read(buf)
-			if err != nil && err != io.EOF {
-				log.Fatal(err)
-			}
-
-			if n == 0 {
-				break
-			}
-
-			if _, err := fout.Write(buf[:n]); err != nil {
-				log.Fatal(err)
-			}
-		}
-	}
 }

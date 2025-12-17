@@ -8,10 +8,10 @@ import (
 )
 
 type Configuration struct {
-	CertificatePath string             `yaml:"certificate_path,omitempty"`
-	DataCollection  []GroupConfig      `yaml:"datacollection"`
-	Evaluation      []GroupConfig      `yaml:"evaluation"`
-	SkillLevels     []SkillLevelConfig `yaml:"skilllevels"`
+	DataPath       string             `yaml:"data_path,omitempty"`
+	DataCollection []GroupConfig      `yaml:"datacollection"`
+	Evaluation     []GroupConfig      `yaml:"evaluation"`
+	SkillLevels    []SkillLevelConfig `yaml:"skilllevels"`
 }
 
 type SkillLevelConfig struct {
