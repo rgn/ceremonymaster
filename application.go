@@ -29,6 +29,9 @@ func initApplication() (Configuration, func()) {
 		fmt.Println("Created application directory at ", APPLICATION_PATH)
 	}
 
+	// use the expanded applicationPath when initializing the logger
+	initLogger(getLogPath())
+
 	configurationFile := getConfigurationFilePath()
 	if _, err := os.Stat(configurationFile); err != nil {
 		defaultCfg := defaultConfiguration()
@@ -36,9 +39,6 @@ func initApplication() (Configuration, func()) {
 		check(err)
 		fmt.Println("Created default configuration file at ", configurationFile)
 	}
-
-	// use the expanded applicationPath when initializing the logger
-	initLogger(getLogPath())
 
 	cfg, err := loadConfiguration(configurationFile)
 	check(err)
