@@ -2,6 +2,8 @@ package main
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -9,7 +11,7 @@ import (
 )
 
 type Certificate struct {
-	id         uuid.UUID             `yaml:"id"`
+	ID         uuid.UUID             `yaml:"id"`
 	Date       time.Time             `yaml:"date"`
 	Applicant  string                `yaml:"applicant"`
 	ObjectName string                `yaml:"object_name"`
@@ -29,7 +31,30 @@ type CertificateResponse struct {
 }
 
 func loadCertificate(stateFile string) (Certificate, error) {
-	return Certificate{}, nil
+	var cert Certificate
+
+	data, err := os.ReadFile(stateFile)
+	if err != nil {
+		return cert, err
+	}
+
+	if err := yaml.Unmarshal(data, &cert); err != nil {
+		return cert, err
+	}
+
+	// Backwards compatibility: older saved certificates may not have had the
+	// exported `ID` field written to YAML (it was previously unexported). If
+	// the unmarshaled ID is zero, try to infer it from the filename which is
+	// the UUID used when the file was created.
+	if cert.ID == uuid.Nil {
+		base := filepath.Base(stateFile)
+		idStr := strings.TrimSuffix(base, filepath.Ext(base))
+		if id, err := uuid.Parse(idStr); err == nil {
+			cert.ID = id
+		}
+	}
+
+	return cert, nil
 }
 
 func saveCertificate(path string, cert Certificate) error {

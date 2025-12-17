@@ -30,10 +30,11 @@ var (
 )
 
 type Model struct {
-	State  string
-	Lg     *lipgloss.Renderer
-	Styles *Styles
-	width  int
+	State     string
+	PrevState string
+	Lg        *lipgloss.Renderer
+	Styles    *Styles
+	width     int
 
 	applicantName string
 	objectName    string
@@ -46,6 +47,11 @@ type Model struct {
 
 	// Values holds pointers to the backing variables for each field keyed by field key.
 	Values map[string]any
+	// Menu state is embedded (defined in menu.go)
+	Menu MenuState
+	// Print view
+	PrintIndex int
+	PrintList  []CertificateSummary
 }
 
 func (m Model) GetString(key string) string {
@@ -65,13 +71,14 @@ func NewModel(cfg Configuration) Model {
 	m := Model{
 		Cfg:    cfg,
 		Lg:     lipgloss.DefaultRenderer(),
-		State:  STATE_DATA_ENTRY,
+		State:  STATE_MENU,
 		Values: make(map[string]any),
 		width:  maxWidth,
 	}
 
 	m.Styles = NewStyles(m.Lg)
 
+	m.InitMenuModel()
 	m.InitDataEntryModel()
 	m.InitEvaluationModel()
 	m.InitSummaryModel()
@@ -264,6 +271,8 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// record previous state for updaters to make entry/transition decisions
+	prev := m.State
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = min(msg.Width, maxWidth) - m.Styles.Base.GetHorizontalFrameSize()
@@ -280,7 +289,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmds []tea.Cmd
+	// persist prev state into the model so the updaters can use it
+	m.PrevState = prev
+
+	// Dispatch to state-specific updaters
+	cmds = append(cmds, m.UpdateMenuModel(msg)...)
 	cmds = append(cmds, m.UpdateDataEntryModel(msg)...)
+	cmds = append(cmds, m.UpdatePrintModel(msg)...)
 	cmds = append(cmds, m.UpdateEvaluationModel(msg)...)
 	cmds = append(cmds, m.UpdateSummaryModel(msg)...)
 
@@ -297,6 +312,10 @@ func (m Model) View() string {
 		footer        string
 	)
 
+	if m.State == STATE_MENU {
+		header, body, footer = m.ViewMenu()
+	}
+
 	if m.State == STATE_DATA_ENTRY {
 		header, body, footer = m.ViewDataEntry()
 	}
@@ -307,6 +326,10 @@ func (m Model) View() string {
 
 	if m.State == STATE_SUMMARY {
 		header, body, footer = m.ViewSummary()
+	}
+
+	if m.State == STATE_PRINT {
+		header, body, footer = m.ViewPrint()
 	}
 
 	if len(header) > 0 {

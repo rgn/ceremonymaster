@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path"
@@ -29,15 +28,14 @@ func initLogger(logPath string) {
 	f, err := os.OpenFile(fullpath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to open log file %s: %v\n", fullpath, err)
-		// fallback to stdout logger
-		logger = log.New(os.Stdout, "", log.LstdFlags)
+		// fallback to stderr logger (do not write to stdout, which breaks the TUI)
+		logger = log.New(os.Stderr, "", log.LstdFlags)
 		return
 	}
 
 	logFile = f
-	// write to both file and stdout so we see output even if file access is problematic
-	mw := io.MultiWriter(f, os.Stdout)
-	logger = log.New(mw, "", log.LstdFlags)
+	// write only to the file; do not write to stdout to avoid breaking the TUI
+	logger = log.New(f, "", log.LstdFlags)
 
 	// confirm initialization
 	logger.Printf("initialized logger, writing to %s", fullpath)
@@ -50,6 +48,6 @@ func closeLogger() {
 	_ = logFile.Sync()
 	_ = logFile.Close()
 	logFile = nil
-	// reset logger to stdout to avoid nil deref if used after close
-	logger = log.New(os.Stdout, "", log.LstdFlags)
+	// reset logger to stderr to avoid nil deref if used after close; never use stdout
+	logger = log.New(os.Stderr, "", log.LstdFlags)
 }
