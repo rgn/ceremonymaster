@@ -340,7 +340,7 @@ func saveConfiguration(path string, config Configuration) error {
 
 	data, err := yaml.Marshal(config)
 	if err != nil {
-		logger.Fatalf("error marshaling configuration to YAML: %w", err)
+		logger.Fatalf("error marshaling configuration to YAML: %v", err)
 		return err
 	}
 
