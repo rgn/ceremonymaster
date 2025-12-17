@@ -10,6 +10,8 @@ version: 2
 
 before:
   hooks:
+    # generate windows .syso from Designer.ico (if present)
+    - ./scripts/generate-windows-icon.sh
     # You may remove this if you don't use go modules.
     - go mod tidy
     # you may remove this if you don't need go generate
