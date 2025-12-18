@@ -64,11 +64,11 @@ Set FontSize 24
 Set Width 1200
 Set Height 1200
 
-Type "./ceremonymaster" Sleep 500ms  Enter Sleep 500ms
+Type "./ceremonymaster" Sleep 500ms  Enter Sleep 1000ms
+Enter Sleep 500ms
 Type "John" Sleep 500ms Enter
 Type "Cake by the Ocean" Sleep 500ms Enter
-Down Sleep 500ms Enter
-Enter Sleep 1000ms Enter
+Down Sleep 500ms Enter Sleep 500ms Enter Sleep 1000ms Enter Sleep 1000ms Enter Sleep 500ms
 Left Sleep 500ms Enter
 Type "Jack" Sleep 500ms Enter
 Type "Clair" Sleep 500ms Enter

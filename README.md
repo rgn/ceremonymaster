@@ -1,12 +1,23 @@
 # CeremonyMaster
 
-<img src="./Designer.png" align="right"
+<img src="assets/designer.png" align="right"
      alt="CeremonyMaster logo by ChatGPT" width="120" height="178">
 
 Tool to conduct pastry tasting an collect in a structure way the feedback from the reviwers.
 
+<h2>Certification Flow:</h2>
 <p align="center">
-  <img src="./demo.gif" alt="Demo" width="738">
+  <img src="assets/zertifizierung.gif" alt="Demo Certification" width="738">
+</p>
+
+<h2>Print Flow:</h2>
+<p align="center">
+  <img src="assets/drucken.gif" alt="Demo Printing" width="738">
+</p>
+
+<h2>Certificate Example:</h2>
+<p align="center">
+  <img src="assets/zertifikat.png" alt="Example Certificate" width="738">
 </p>
 
 ## How It Works
