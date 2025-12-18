@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -265,6 +267,62 @@ func (m *Model) CreateCertificate() {
 	currentCertificatePath := path.Join(currentPath, certificate.ID.String()+".yaml")
 
 	os.MkdirAll(currentPath, os.ModePerm)
+
+	// Determine source image: prefer user-selected `m.objectImage` if present
+	// and exists; otherwise fall back to the app asset `assets/designer.png`.
+	sourceImage := strings.TrimSpace(m.objectImage)
+	if sourceImage == "" {
+		// try app asset
+		appAsset := filepath.Join(getAppBasePath(), "assets", "designer.png")
+		if _, err := os.Stat(appAsset); err == nil {
+			sourceImage = appAsset
+			logger.Printf("no selected image; using app asset %s", appAsset)
+		} else {
+			logger.Printf("no selected image and app asset not found: %s", appAsset)
+			sourceImage = ""
+		}
+	} else {
+		// ensure selected image actually exists; fall back if not
+		if _, err := os.Stat(sourceImage); err != nil {
+			logger.Printf("selected image not found: %s; attempting fallback asset", sourceImage)
+			appAsset := filepath.Join(getAppBasePath(), "assets", "designer.png")
+			if _, err := os.Stat(appAsset); err == nil {
+				sourceImage = appAsset
+				logger.Printf("falling back to app asset %s", appAsset)
+			} else {
+				logger.Printf("fallback asset not found: %s", appAsset)
+				sourceImage = ""
+			}
+		}
+	}
+
+	// If we have a source image (either user-selected or app asset), copy it
+	// next to the certificate using the certificate ID as basename while
+	// preserving the original extension.
+	if sourceImage != "" {
+		ext := filepath.Ext(sourceImage)
+		imgDest := filepath.Join(currentPath, certificate.ID.String()+ext)
+
+		in, err := os.Open(sourceImage)
+		if err != nil {
+			logger.Printf("failed to open source image %s: %v", sourceImage, err)
+		} else {
+			defer in.Close()
+			out, err := os.Create(imgDest)
+			if err != nil {
+				logger.Printf("failed to create destination image %s: %v", imgDest, err)
+			} else {
+				if _, err := io.Copy(out, in); err != nil {
+					logger.Printf("failed to copy image to %s: %v", imgDest, err)
+				} else {
+					_ = out.Close()
+					// make readable
+					_ = os.Chmod(imgDest, 0644)
+					logger.Printf("copied image %s to %s", sourceImage, imgDest)
+				}
+			}
+		}
+	}
 
 	saveCertificate(currentCertificatePath, certificate)
 }

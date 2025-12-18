@@ -9,7 +9,6 @@ Tool to conduct pastry tasting an collect in a structure way the feedback from t
   <img src="./demo.gif" alt="Demo" width="738">
 </p>
 
-
 ## How It Works
 
 1. Download the binary
