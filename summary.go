@@ -195,11 +195,9 @@ func (m *Model) CreateCertificate() {
 		Questions:  make([]CertificateQuestion, 0),
 	}
 
-	for _, reviewer := range m.Evaluation.Reviewers {
-		reviewerName := m.DataEntry.Form.GetString(reviewer.key)
-		if strings.TrimSpace(reviewerName) == "" {
-			reviewerName = reviewer.key
-		}
+	for _, k := range m.SortedReviewerKeys {
+		reviewer := m.Reviewers[k]
+		reviewerName := reviewer.Name
 		certificate.Reviewers = append(certificate.Reviewers, reviewerName)
 	}
 
@@ -242,9 +240,9 @@ func (m *Model) CreateCertificate() {
 			}
 		}
 
-		for reviewerIdx, form := range m.Evaluation.Forms {
-
-			reviewerName := m.getReviewerName(reviewerIdx)
+		for _, reviewerIdx := range m.SortedReviewerKeys {
+			form := m.Evaluation.Forms[reviewerIdx]
+			reviewerName := m.GetReviewerName(reviewerIdx)
 			commentVal := form.GetString(fcCommentKey)
 			ratingVal := 0
 			if rv, err := strconv.Atoi(form.GetString(fcRatingKey)); err == nil {
