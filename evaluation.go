@@ -3,9 +3,6 @@ package main
 import (
 	"fmt"
 	"math"
-	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,116 +10,47 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// reviewer represents a reviewer key and its numeric index (e.g. reviewer_1 -> 1).
-type reviewer struct {
-	key             string
-	idx             int
-	reviewCompleted bool
-}
-
 type EvaluationModel struct {
-	FormInitialized   bool
 	Form              *huh.Form
 	Forms             map[int]*huh.Form // per reviewer idx
 	ActiveReviewerIdx int
-
-	Reviewers map[int]reviewer
-	//ReviewerLookup        map[string]reviewer
-	ReviewerReverseLookup map[int]string
 
 	// Results holds the finalized values after Form completion.
 	Results map[string]any
 }
 
-func (m *Model) InitEvaluationModel() {
+func (mainModel *Model) InitEvaluationModel() {
 
-	m.Evaluation = EvaluationModel{
+	mainModel.Evaluation = EvaluationModel{
 		ActiveReviewerIdx: math.MaxInt32,
 		Form:              nil,
 		Forms:             make(map[int]*huh.Form),
-		Reviewers:         make(map[int]reviewer),
-		//ReviewerLookup:        make(map[string]reviewer),
-		ReviewerReverseLookup: make(map[int]string),
-		Results:               make(map[string]any),
+		Results:           make(map[string]any),
 	}
+}
 
-	reviewerRe := regexp.MustCompile(`reviewer_(\d+)`)
-	for _, g := range m.Cfg.DataCollection {
-		groupKey := g.Key
-		for _, fc := range g.Fields {
-			fieldKey := BuildFieldKey(groupKey, fc.Key)
-			if sm := reviewerRe.FindStringSubmatch(fieldKey); sm != nil {
-				if n, err := strconv.Atoi(sm[1]); err == nil {
-					r := reviewer{key: fieldKey, idx: n} // reviewerName
-					m.Evaluation.Reviewers[n] = r
-				}
-			}
-		}
-	}
+func (mainModel *Model) BuildReviewerForms() {
 
-	minId := 9999999
-	for _, r := range m.Evaluation.Reviewers {
-		minId = min(minId, r.idx)
-	}
+	m := &mainModel.Evaluation
 
-	m.Evaluation.ActiveReviewerIdx = minId
+	logger.Println("Initialize evaluation forms for", len(mainModel.Reviewers), "reviewers.")
 
-	for _, reviewer := range m.Evaluation.Reviewers {
-		reviewerEvaluationGroups := m.buildGroups(m.Cfg.Evaluation)
+	for _, reviewer := range mainModel.Reviewers {
+		logger.Println("Initializing evaluation form for reviewer:", reviewer.Name, "idx:", reviewer.Idx)
+		reviewerEvaluationGroups := mainModel.buildGroups(mainModel.Cfg.Evaluation)
 		reviewerForm := huh.NewForm(reviewerEvaluationGroups...).
 			WithWidth(80).
 			WithShowHelp(false).
 			WithShowErrors(true)
 
-		m.Evaluation.Forms[reviewer.idx] = reviewerForm
-
+		m.Forms[reviewer.Idx] = reviewerForm
+	}
+	minId := 9999999
+	for _, r := range mainModel.Reviewers {
+		minId = min(minId, r.Idx)
 	}
 
-	m.Evaluation.FormInitialized = false
-	m.Evaluation.Form = m.Evaluation.Forms[m.Evaluation.ActiveReviewerIdx]
-}
-
-func buildReviewerKey(prefix string, revreviewer reviewer) string {
-	return fmt.Sprintf("%s_reviewer_%d", prefix, revreviewer.idx)
-}
-
-func (m *Model) getReviewerName(reviewerIdx int) string {
-
-	reviewerKey := m.Evaluation.Reviewers[reviewerIdx].key
-	reviewerName := m.DataEntry.Form.GetString(reviewerKey)
-	if strings.TrimSpace(reviewerName) == "" {
-		reviewerName = reviewerKey
-	}
-
-	return reviewerName
-}
-
-func (m *EvaluationModel) getNextReviewerIdx() int {
-	next := -1
-	// iterate reviewers in numeric order for determinism
-	keys := make([]int, 0, len(m.Reviewers))
-	for _, r := range m.Reviewers {
-		keys = append(keys, r.idx)
-	}
-	sort.Ints(keys)
-	for _, k := range keys {
-		r := m.Reviewers[k]
-		if r.reviewCompleted {
-			continue
-		}
-		next = k
-		break
-	}
-	return next
-}
-
-func (m *EvaluationModel) hasPendingReviews() bool {
-	for _, r := range m.Reviewers {
-		if !r.reviewCompleted {
-			return true
-		}
-	}
-	return false
+	m.ActiveReviewerIdx = minId
 }
 
 func (mainModel *Model) UpdateEvaluationModel(msg tea.Msg) []tea.Cmd {
@@ -137,6 +65,7 @@ func (mainModel *Model) UpdateEvaluationModel(msg tea.Msg) []tea.Cmd {
 	var cmd tea.Cmd
 
 	if m.Forms[m.ActiveReviewerIdx] == nil {
+		logger.Println("No form found for active reviewer idx:", m.ActiveReviewerIdx)
 		return cmds
 	}
 
@@ -146,8 +75,10 @@ func (mainModel *Model) UpdateEvaluationModel(msg tea.Msg) []tea.Cmd {
 	}
 
 	if m.Forms[m.ActiveReviewerIdx].State == huh.StateCompleted {
-		revIdx := m.ActiveReviewerIdx
-		rev := m.Reviewers[revIdx]
+
+		reviewer := mainModel.Reviewers[m.ActiveReviewerIdx]
+		reviewer.Completed = true
+		logger.Println("Form completed for reviewer:", reviewer.Name, "idx:", m.ActiveReviewerIdx)
 
 		// collect current evaluation field values into Results with suffix
 		for _, g := range mainModel.Cfg.Evaluation {
@@ -155,7 +86,7 @@ func (mainModel *Model) UpdateEvaluationModel(msg tea.Msg) []tea.Cmd {
 				k := fc.Key
 				// check for keys specific to the current reviewer
 				// add value to a reviewer specific result key
-				outKey := buildReviewerKey(k, rev)
+				outKey := BuildReviewerKey(k, *reviewer)
 				if p, ok := mainModel.Values[k]; ok {
 					switch v := p.(type) {
 					case *string:
@@ -178,21 +109,17 @@ func (mainModel *Model) UpdateEvaluationModel(msg tea.Msg) []tea.Cmd {
 			}
 		}
 
-		// mark reviewer completed in the map
-		if r, ok := m.Reviewers[revIdx]; ok {
-			r.reviewCompleted = true
-			m.Reviewers[revIdx] = r
-		}
-
 		// find next reviewer without a review
-		next := m.getNextReviewerIdx()
+		next := mainModel.GetNextReviewerIdx()
+		if next != -1 && next != m.ActiveReviewerIdx {
+			logger.Println("Switching to next reviewer: ", next)
 
-		if next != -1 {
 			m.ActiveReviewerIdx = next
 
 			// initialize the new Form
 			cmds = append(cmds, m.Forms[m.ActiveReviewerIdx].Init())
 		} else {
+			logger.Println("No more reviewers left without completed review.")
 			// no more reviewers -> finish
 			mainModel.State = STATE_SUMMARY
 		}
@@ -203,30 +130,35 @@ func (mainModel *Model) UpdateEvaluationModel(msg tea.Msg) []tea.Cmd {
 	return cmds
 }
 
-func (m *Model) ViewEvaluation() (header string, body string, footer string) {
-	s := m.Styles
+func (mainModel *Model) ViewEvaluation() (header string, body string, footer string) {
 
-	reviewerName := m.getReviewerName(m.Evaluation.ActiveReviewerIdx)
+	s := mainModel.Styles
+	m := mainModel.Evaluation
 
-	header += fmt.Sprintf("Review by %s - %d/%d", s.Highlight.Render(reviewerName), m.Evaluation.ActiveReviewerIdx, len(m.Evaluation.Reviewers))
+	reviewerName := mainModel.Reviewers[m.ActiveReviewerIdx].Name
 
-	switch m.Evaluation.Forms[m.Evaluation.ActiveReviewerIdx].State {
+	header += fmt.Sprintf("Review by %s - %d/%d", s.Highlight.Render(reviewerName), m.ActiveReviewerIdx, len(mainModel.Reviewers))
+	if m.Forms[m.ActiveReviewerIdx] == nil {
+		return header, "", ""
+	}
+
+	switch m.Forms[m.ActiveReviewerIdx].State {
 	case huh.StateCompleted:
 		// nothing
 	default:
 
-		v := strings.TrimSuffix(m.Evaluation.Form.View(), "\n\n")
-		renderedForm := m.Lg.NewStyle().Margin(1, 0).Render(v)
+		v := strings.TrimSuffix(m.Form.View(), "\n\n")
+		renderedForm := mainModel.Lg.NewStyle().Margin(1, 0).Render(v)
 
-		errors := m.Evaluation.Form.Errors()
+		errors := m.Form.Errors()
 		if len(errors) > 0 {
-			header = m.appErrorBoundaryView(m.errorView(m.Evaluation.Form))
+			header = mainModel.appErrorBoundaryView(mainModel.errorView(m.Form))
 		}
 
 		const statusWidth = 28
 		sb := strings.Builder{}
-		if m.Evaluation.Results != nil {
-			for k, v := range m.Evaluation.Results {
+		if m.Results != nil {
+			for k, v := range m.Results {
 				switch t := v.(type) {
 				case string:
 					sb.WriteString(fmt.Sprintf("%s: %s\n", k, t))
@@ -240,7 +172,7 @@ func (m *Model) ViewEvaluation() (header string, body string, footer string) {
 			}
 		}
 
-		statusMarginLeft := m.width - statusWidth - lipgloss.Width(renderedForm) - s.Status.GetMarginRight()
+		statusMarginLeft := mainModel.width - statusWidth - lipgloss.Width(renderedForm) - s.Status.GetMarginRight()
 		status := s.Status.
 			Height(lipgloss.Height(renderedForm)).
 			Width(statusWidth).
@@ -250,16 +182,16 @@ func (m *Model) ViewEvaluation() (header string, body string, footer string) {
 		body = lipgloss.JoinHorizontal(lipgloss.Left, renderedForm, status)
 		body = lipgloss.JoinVertical(lipgloss.Top, []string{body}...)
 
-		footer = m.appBoundaryView(m.Evaluation.Form.Help().ShortHelpView(m.Evaluation.Form.KeyBinds()))
+		footer = mainModel.appBoundaryView(m.Form.Help().ShortHelpView(m.Form.KeyBinds()))
 		if len(errors) > 0 {
-			footer = m.appErrorBoundaryView("")
+			footer = mainModel.appErrorBoundaryView("")
 		}
 
 		body = lipgloss.JoinHorizontal(lipgloss.Left, renderedForm)
 
-		footer = m.appBoundaryView(m.DataEntry.Form.Help().ShortHelpView(m.DataEntry.Form.KeyBinds()))
+		footer = mainModel.appBoundaryView(m.Form.Help().ShortHelpView(m.Form.KeyBinds()))
 		if len(errors) > 0 {
-			footer = m.appErrorBoundaryView("")
+			footer = mainModel.appErrorBoundaryView("")
 		}
 	}
 

@@ -27,46 +27,50 @@ func (m *Model) InitDataEntryModel() {
 	}
 }
 
-func (m *Model) UpdateDataEntryModel(msg tea.Msg) []tea.Cmd {
+func (mainModel *Model) UpdateDataEntryModel(msg tea.Msg) []tea.Cmd {
+
+	m := &mainModel.DataEntry
 
 	cmds := []tea.Cmd{}
 
-	if m.State != STATE_DATA_ENTRY {
+	if mainModel.State != STATE_DATA_ENTRY {
 		return cmds
 	}
 
-	Form, cmd := m.DataEntry.Form.Update(msg)
+	Form, cmd := mainModel.DataEntry.Form.Update(msg)
 
 	if f, ok := Form.(*huh.Form); ok {
-		m.DataEntry.Form = f
+		mainModel.DataEntry.Form = f
 	}
 
-	m.DataEntry.Reviewers = []string{}
-	for _, v := range m.Cfg.DataCollection {
+	m.Reviewers = []string{}
+	for _, v := range mainModel.Cfg.DataCollection {
 		groupKey := v.Key
 		for _, fc := range v.Fields {
 			fieldKey := BuildFieldKey(groupKey, fc.Key)
 			if strings.HasPrefix(fieldKey, "reviewer_") {
-				var reviewer = m.DataEntry.Form.GetString(fieldKey)
+				var reviewer = m.Form.GetString(fieldKey)
 				if reviewer != "" {
-					m.DataEntry.Reviewers = append(m.DataEntry.Reviewers, reviewer)
+					m.Reviewers = append(m.Reviewers, reviewer)
 				}
 			}
 		}
 	}
 
-	sort.Strings(m.DataEntry.Reviewers)
+	sort.Strings(m.Reviewers)
 
 	// If the Form just completed, collect results and transition to
 	// the review State while initializing the evaluation Form.
-	if m.DataEntry.Form.State == huh.StateCompleted {
+	if m.Form.State == huh.StateCompleted {
 
-		m.applicantName = m.DataEntry.Form.GetString("data_entry_applicant_name")
-		m.objectName = m.DataEntry.Form.GetString("data_entry_object_description")
-		m.objectImage = m.DataEntry.Form.GetString("data_entry_object_image")
+		mainModel.applicantName = m.Form.GetString("data_entry_applicant_name")
+		mainModel.objectName = m.Form.GetString("data_entry_object_description")
+		mainModel.objectImage = m.Form.GetString("data_entry_object_image")
+		mainModel.BuildReviewers()
+		mainModel.BuildReviewerForms()
 
 		// Transition to evaluation and initialize the evaluation Form.
-		m.State = "evaluation"
+		mainModel.State = "evaluation"
 		// Do not append the Form's quit command to avoid exiting the app.
 	} else {
 		// Only append the Form cmd while it is still active.
@@ -76,23 +80,25 @@ func (m *Model) UpdateDataEntryModel(msg tea.Msg) []tea.Cmd {
 	return cmds
 }
 
-func (m *Model) ViewDataEntry() (header string, body string, footer string) {
-	s := m.Styles
+func (mainModel *Model) ViewDataEntry() (header string, body string, footer string) {
+
+	s := mainModel.Styles
+	m := mainModel.DataEntry
 
 	header = "Datenerfassung"
 
-	switch m.DataEntry.Form.State {
+	switch m.Form.State {
 	case huh.StateCompleted:
 		var b strings.Builder
 		body = s.Status.Margin(0, 1).Padding(1, 2).Width(48).Render(b.String()) + "\n\n"
 	default:
 		// Form (left side)
-		v := strings.TrimSuffix(m.DataEntry.Form.View(), "\n\n")
-		renderedForm := m.Lg.NewStyle().Margin(1, 0).Render(v)
+		v := strings.TrimSuffix(m.Form.View(), "\n\n")
+		renderedForm := mainModel.Lg.NewStyle().Margin(1, 0).Render(v)
 
-		errors := m.DataEntry.Form.Errors()
+		errors := m.Form.Errors()
 		if len(errors) > 0 {
-			header = m.appErrorBoundaryView(m.errorView(m.DataEntry.Form))
+			header = mainModel.appErrorBoundaryView(mainModel.errorView(m.Form))
 		}
 
 		// Status (right side)
@@ -105,31 +111,31 @@ func (m *Model) ViewDataEntry() (header string, body string, footer string) {
 				jobDescription    string
 			)
 
-			if m.DataEntry.Form.GetString("data_entry_applicant_name") != "" {
-				applicantName := m.DataEntry.Form.GetString("data_entry_applicant_name")
-				buildInfo = m.Styles.Highlight.Render(applicantName)
+			if m.Form.GetString("data_entry_applicant_name") != "" {
+				applicantName := m.Form.GetString("data_entry_applicant_name")
+				buildInfo = s.Highlight.Render(applicantName)
 			}
 
-			if m.DataEntry.Form.GetString("data_entry_object_description") != "" {
-				objectDescription := m.DataEntry.Form.GetString("data_entry_object_description")
-				buildInfo += fmt.Sprintf(" beantragt die Zertifizierung von %s", m.Styles.Highlight.Render(objectDescription))
+			if m.Form.GetString("data_entry_object_description") != "" {
+				objectDescription := m.Form.GetString("data_entry_object_description")
+				buildInfo += fmt.Sprintf(" beantragt die Zertifizierung von %s", s.Highlight.Render(objectDescription))
 			}
 
-			if m.DataEntry.Form.GetString("data_entry_object_class") != "" {
-				objectClass := m.DataEntry.Form.GetString("data_entry_object_class")
-				buildInfo += fmt.Sprintf(" (Klasse: %s)", m.Styles.Highlight.Render(objectClass))
+			if m.Form.GetString("data_entry_object_class") != "" {
+				objectClass := m.Form.GetString("data_entry_object_class")
+				buildInfo += fmt.Sprintf(" (Klasse: %s)", s.Highlight.Render(objectClass))
 			}
 
 			if objectDescription != "" || objectClass != "" {
 				buildInfo += "."
 			}
 
-			if len(m.DataEntry.Reviewers) > 0 {
-				jobDescription += "\n\nBegutachtet durch:\n\t- " + strings.Join(m.DataEntry.Reviewers, "\n\t- ")
+			if len(m.Reviewers) > 0 {
+				jobDescription += "\n\nBegutachtet durch:\n\t- " + strings.Join(m.Reviewers, "\n\t- ")
 			}
 
 			const statusWidth = 28
-			statusMarginLeft := m.width - statusWidth - lipgloss.Width(renderedForm) - s.Status.GetMarginRight()
+			statusMarginLeft := mainModel.width - statusWidth - lipgloss.Width(renderedForm) - s.Status.GetMarginRight()
 			status = s.Status.
 				Height(lipgloss.Height(renderedForm)).
 				Width(statusWidth).
@@ -142,9 +148,9 @@ func (m *Model) ViewDataEntry() (header string, body string, footer string) {
 		body = lipgloss.JoinHorizontal(lipgloss.Left, renderedForm, status)
 		body = lipgloss.JoinVertical(lipgloss.Top, []string{body}...)
 
-		footer = m.appBoundaryView(m.DataEntry.Form.Help().ShortHelpView(m.DataEntry.Form.KeyBinds()))
+		footer = mainModel.appBoundaryView(m.Form.Help().ShortHelpView(m.Form.KeyBinds()))
 		if len(errors) > 0 {
-			footer = m.appErrorBoundaryView("")
+			footer = mainModel.appErrorBoundaryView("")
 		}
 	}
 
