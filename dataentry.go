@@ -16,6 +16,7 @@ type DataEntryModel struct {
 }
 
 func (m *Model) InitDataEntryModel() {
+	logger.Println("Init print model")
 
 	groups := m.buildGroups(m.Cfg.DataCollection)
 
@@ -65,6 +66,7 @@ func (mainModel *Model) UpdateDataEntryModel(msg tea.Msg) []tea.Cmd {
 
 		mainModel.applicantName = m.Form.GetString("data_entry_applicant_name")
 		mainModel.objectName = m.Form.GetString("data_entry_object_description")
+		mainModel.objectClass = m.Form.GetString("data_entry_object_class")
 		mainModel.objectImage = m.Form.GetString("data_entry_object_image")
 		mainModel.BuildReviewers()
 		mainModel.BuildReviewerForms()

@@ -12,7 +12,10 @@ type Styles struct {
 	StatusHeader,
 	Highlight,
 	ErrorHeaderText,
-	Help lipgloss.Style
+	ShortKeyStyle lipgloss.Style
+	DescStyle lipgloss.Style
+	SepStyle  lipgloss.Style
+	Help      lipgloss.Style
 }
 
 func NewStyles(lg *lipgloss.Renderer) *Styles {
@@ -37,5 +40,21 @@ func NewStyles(lg *lipgloss.Renderer) *Styles {
 		Foreground(red)
 	s.Help = lg.NewStyle().
 		Foreground(lipgloss.Color("240"))
+
+	s.ShortKeyStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
+		Light: "#909090",
+		Dark:  "#626262",
+	})
+
+	s.DescStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
+		Light: "#B2B2B2",
+		Dark:  "#4A4A4A",
+	})
+
+	s.SepStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
+		Light: "#DDDADA",
+		Dark:  "#3C3C3C",
+	})
+
 	return &s
 }

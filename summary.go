@@ -2,18 +2,12 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"math"
-	"os"
-	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/google/uuid"
 )
 
 const (
@@ -24,13 +18,16 @@ const (
 )
 
 type SummaryModel struct {
-	Rank        string
-	AvgTotal    float32
-	SumTotal    float32
-	Table       table.Model
-	FieldTitles map[string]string
-	// Summaries holds computed aggregates (min/max/avg/count) per evaluation field.
-	Summaries map[string]map[string]float32
+	level        string
+	avt_total    float32
+	sum_total    float32
+	table        table.Model
+	field_titles map[string]string
+	// summaries holds computed aggregates (min/max/avg/count) per evaluation field.
+	summaries    map[string]map[string]float32
+	overall_rank int
+	class_rank   int
+	Certificate  *Certificate
 }
 
 func (m *Model) InitSummaryModel() {
@@ -42,24 +39,26 @@ func (m *Model) InitSummaryModel() {
 		{Title: "Max", Width: 8},
 	}
 
-	fieldTitles := make(map[string]string)
+	field_titles := make(map[string]string)
 
 	for _, g := range m.Cfg.Evaluation {
 		for _, f := range g.Fields {
-			fieldTitles[f.Key] = f.Title
+			field_titles[f.Key] = f.Title
 		}
 	}
 
 	m.Summary = SummaryModel{
-		AvgTotal:    0.0,
-		SumTotal:    0.0,
-		FieldTitles: fieldTitles,
-		Table: table.New(
+		avt_total:    0.0,
+		sum_total:    0.0,
+		overall_rank: -1,
+		class_rank:   -1,
+		field_titles: field_titles,
+		table: table.New(
 			table.WithColumns(columns),
 			table.WithFocused(true),
 			table.WithHeight(len(m.Cfg.Evaluation)+1),
 		),
-		Summaries: make(map[string]map[string]float32),
+		summaries: make(map[string]map[string]float32),
 	}
 }
 
@@ -70,7 +69,7 @@ type sumEnvelope struct {
 
 // summarizeEvaluations computes min, max and weighted average for each
 // evaluation field across all reviewers. Results are stored in
-// `m.Summaries[fieldKey]` with keys "min","max","avg","count".
+// `m.summaries[fieldKey]` with keys "min","max","avg","count".
 func (m *Model) summarizeEvaluations() {
 
 	formKeysGrouped := make(map[string][]sumEnvelope)
@@ -108,7 +107,7 @@ func (m *Model) summarizeEvaluations() {
 			}
 		}
 
-		m.Summary.Summaries[groupKey] = map[string]float32{
+		m.Summary.summaries[groupKey] = map[string]float32{
 			MIN: float32(minVal),
 			MAX: float32(maxVal),
 			AVG: float32(sumVal) / float32(len(m.Evaluation.Forms)),
@@ -125,39 +124,25 @@ func (m *Model) UpdateSummaryModel(msg tea.Msg) []tea.Cmd {
 		return cmds
 	}
 
-	m.summarizeEvaluations()
+	logger.Println("Update summary")
 
-	var AvgTotal float32 = 0.0
 	rows := []table.Row{}
+	m.Summary.Certificate = m.CreateCertificate()
+	summary := m.SummarizeCertificate(*m.Summary.Certificate)
 
-	for groupTitle, summary := range m.Summary.Summaries {
-		// title, ok := m.Summary.FieldTitles[fieldKey]
-		// if !ok || title == "" {
-		// 	// fallback: use the key itself or a placeholder so UI isn't blank
-		// 	title = fieldKey
-		// }
-
-		AvgTotal += summary[AVG]
-
+	for title, summaryEntry := range summary.entries {
 		rows = append(rows, table.Row{
-			groupTitle,
-			fmt.Sprintf("%.2f", summary[AVG]),
-			fmt.Sprintf("%.0f", summary[MIN]),
-			fmt.Sprintf("%.0f", summary[MAX]),
+			title,
+			fmt.Sprintf("%.2f", summaryEntry.avg),
+			fmt.Sprintf("%.0f", summaryEntry.min),
+			fmt.Sprintf("%.0f", summaryEntry.max),
 		})
 	}
 
-	m.Summary.Table.SetRows(rows)
-
-	Rank := ""
-	avgResult := AvgTotal / float32(len(m.Cfg.Evaluation))
-	for _, level := range m.Cfg.SkillLevels {
-		if avgResult >= level.MinPoints {
-			Rank = level.Name
-		}
-	}
-	m.Summary.Rank = Rank
-	m.Summary.AvgTotal = avgResult
+	m.Summary.table.SetRows(rows)
+	m.Summary.level = summary.level
+	m.Summary.avt_total = summary.avg
+	m.Summary.overall_rank, m.Summary.class_rank = summary.GetRanks()
 
 	return cmds
 }
@@ -169,158 +154,14 @@ func (m *Model) ViewSummary() (header string, body string, footer string) {
 
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "\nDeine Bewertungen für %s ist %s\n", s.Highlight.Render(m.objectName), s.Highlight.Render(fmt.Sprintf("%.2f", m.Summary.AvgTotal)))
-	fmt.Fprintf(&b, "\nHerzlichen Glückwunsch %s zum %s\n", s.Highlight.Render(m.applicantName), s.Highlight.Render(m.Summary.Rank))
+	fmt.Fprintf(&b, "\nDeine Bewertungen für %s ist %s\n", s.Highlight.Render(m.objectName), s.Highlight.Render(fmt.Sprintf("%.2f", m.Summary.avt_total)))
+	fmt.Fprintf(&b, "\nHerzlichen Glückwunsch %s zum %s\n", s.Highlight.Render(m.applicantName), s.Highlight.Render(m.Summary.level))
+	fmt.Fprintf(&b, "\nDu erreich damit den Rang %d in der Bestenliste und Rang %d für %s.\n", m.Summary.overall_rank, m.Summary.class_rank, m.objectClass)
 
-	b.WriteString(s.Base.Render(m.Summary.Table.View()))
+	b.WriteString(s.Base.Render(m.Summary.table.View()))
 
 	body = b.String() + "\n\n"
 	footer = m.appBoundaryView("Drücken Sie 'q' oder 'Esc', um die Anwendung zu beenden.")
 
 	return header, body, footer
-}
-
-func (m *Model) CreateCertificate() {
-
-	if m.State != STATE_SUMMARY {
-		return
-	}
-
-	certificate := Certificate{
-		ID:         uuid.New(),
-		Date:       time.Now(),
-		Applicant:  m.applicantName,
-		ObjectName: m.objectName,
-		Reviewers:  make([]string, 0),
-		Questions:  make([]CertificateQuestion, 0),
-	}
-
-	for _, k := range m.SortedReviewerKeys {
-		reviewer := m.Reviewers[k]
-		reviewerName := reviewer.Name
-		certificate.Reviewers = append(certificate.Reviewers, reviewerName)
-	}
-
-	formKeysGrouped := make(map[string][]string)
-	for _, g := range m.Cfg.Evaluation {
-		groupKey := g.Key
-		formKeysGrouped[g.Title] = []string{}
-		for _, fc := range g.Fields {
-			fieldKey := BuildFieldKey(groupKey, fc.Key)
-			var appendFieldKey bool = false
-			if fc.Type == "range" && strings.HasSuffix(fieldKey, "_rating") {
-				appendFieldKey = true
-			} else if fc.Type == "text" && strings.HasSuffix(fieldKey, "_comment") {
-				appendFieldKey = true
-			}
-
-			if appendFieldKey {
-				formKeysGrouped[g.Title] = append(formKeysGrouped[g.Title], fieldKey)
-			}
-		}
-	}
-
-	for groupTitle, formKeyGroup := range formKeysGrouped {
-
-		if len(formKeyGroup) != 2 {
-			panic("expected rating & comment field per group")
-		}
-
-		certificateQuestion := CertificateQuestion{
-			Question:  groupTitle,
-			Responses: []CertificateResponse{},
-		}
-
-		var fcRatingKey, fcCommentKey string
-		for _, fk := range formKeyGroup {
-			if strings.HasSuffix(fk, "_rating") {
-				fcRatingKey = fk
-			} else if strings.HasSuffix(fk, "_comment") {
-				fcCommentKey = fk
-			}
-		}
-
-		for _, reviewerIdx := range m.SortedReviewerKeys {
-			form := m.Evaluation.Forms[reviewerIdx]
-			reviewerName := m.GetReviewerName(reviewerIdx)
-			commentVal := form.GetString(fcCommentKey)
-			ratingVal := 0
-			if rv, err := strconv.Atoi(form.GetString(fcRatingKey)); err == nil {
-				ratingVal = rv
-			}
-
-			response := CertificateResponse{
-				Name:    reviewerName,
-				Value:   ratingVal,
-				Comment: commentVal,
-			}
-
-			certificateQuestion.Responses = append(certificateQuestion.Responses, response)
-		}
-
-		certificate.Questions = append(certificate.Questions, certificateQuestion)
-	}
-
-	currentPath := path.Join(getCertificatesPath(), certificate.Date.Format("2006"), certificate.Date.Format("01"))
-	currentCertificatePath := path.Join(currentPath, certificate.ID.String()+".yaml")
-
-	os.MkdirAll(currentPath, os.ModePerm)
-
-	// Determine source image: prefer user-selected `m.objectImage` if present
-	// and exists; otherwise fall back to the app asset `assets/designer.png`.
-	sourceImage := strings.TrimSpace(m.objectImage)
-	if sourceImage == "" {
-		// try app asset
-		appAsset := filepath.Join(getAppBasePath(), "assets", "designer.png")
-		if _, err := os.Stat(appAsset); err == nil {
-			sourceImage = appAsset
-			logger.Printf("no selected image; using app asset %s", appAsset)
-		} else {
-			logger.Printf("no selected image and app asset not found: %s", appAsset)
-			sourceImage = ""
-		}
-	} else {
-		// ensure selected image actually exists; fall back if not
-		if _, err := os.Stat(sourceImage); err != nil {
-			logger.Printf("selected image not found: %s; attempting fallback asset", sourceImage)
-			appAsset := filepath.Join(getAppBasePath(), "assets", "designer.png")
-			if _, err := os.Stat(appAsset); err == nil {
-				sourceImage = appAsset
-				logger.Printf("falling back to app asset %s", appAsset)
-			} else {
-				logger.Printf("fallback asset not found: %s", appAsset)
-				sourceImage = ""
-			}
-		}
-	}
-
-	// If we have a source image (either user-selected or app asset), copy it
-	// next to the certificate using the certificate ID as basename while
-	// preserving the original extension.
-	if sourceImage != "" {
-		ext := filepath.Ext(sourceImage)
-		imgDest := filepath.Join(currentPath, certificate.ID.String()+ext)
-
-		in, err := os.Open(sourceImage)
-		if err != nil {
-			logger.Printf("failed to open source image %s: %v", sourceImage, err)
-		} else {
-			defer in.Close()
-			out, err := os.Create(imgDest)
-			if err != nil {
-				logger.Printf("failed to create destination image %s: %v", imgDest, err)
-			} else {
-				if _, err := io.Copy(out, in); err != nil {
-					logger.Printf("failed to copy image to %s: %v", imgDest, err)
-				} else {
-					_ = out.Close()
-					// make readable
-					_ = os.Chmod(imgDest, 0644)
-					logger.Printf("copied image %s to %s", sourceImage, imgDest)
-				}
-			}
-		}
-	}
-
-	saveCertificate(currentCertificatePath, certificate)
 }

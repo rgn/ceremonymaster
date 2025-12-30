@@ -25,25 +25,49 @@ type CertificateSummary struct {
 	ObjectName string
 }
 
-// findLatestCertificates scans the certificates directory under the application
-// certificates path and returns the most recent `limit` certificates sorted
-// descending by date where possible. If the YAML contains a `date` field it
-// will be used; otherwise the file mod time is used.
-func findLatestCertificates(limit int) ([]CertificateSummary, error) {
-	base := getCertificatesPath()
-	var summaries []CertificateSummary
+func GetCertificateFilePaths() []string {
 
-	_ = filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
+	logger.Println("Get certifate file paths")
+
+	certificatesPath := getCertificatesPath()
+
+	certificates := []string{}
+
+	_ = filepath.WalkDir(certificatesPath, func(p string, d fs.DirEntry, err error) error {
+
 		if err != nil || d.IsDir() {
 			return nil
 		}
+
 		if filepath.Ext(p) != ".yaml" {
 			return nil
 		}
 
+		logger.Printf("Found certificate file: %s", p)
+
+		certificates = append(certificates, p)
+
+		return nil
+	})
+
+	return certificates
+}
+
+// findLatestCertificates scans the certificates directory under the application
+// certificates path and returns the most recent `limit` certificates sorted
+// descending by date where possible. If the YAML contains a `date` field it
+// will be used; otherwise the file mod time is used.
+func FindLatestCertificates(limit int) ([]CertificateSummary, error) {
+
+	var summaries []CertificateSummary
+
+	for _, p := range GetCertificateFilePaths() {
+
 		data, err := os.ReadFile(p)
+
 		if err != nil {
-			return nil
+			logger.Fatalln("Failed to load certificate ", p, err.Error())
+			continue
 		}
 
 		// Try to unmarshal date/applicant/object_name from YAML into small struct
@@ -63,6 +87,8 @@ func findLatestCertificates(limit int) ([]CertificateSummary, error) {
 			}
 		}
 
+		logger.Println("Create summary for", p)
+
 		name := filepath.Base(p)
 		summaries = append(summaries, CertificateSummary{
 			Path:       p,
@@ -71,9 +97,7 @@ func findLatestCertificates(limit int) ([]CertificateSummary, error) {
 			Applicant:  meta.Applicant,
 			ObjectName: meta.ObjectName,
 		})
-
-		return nil
-	})
+	}
 
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].Date.After(summaries[j].Date)
@@ -86,19 +110,28 @@ func findLatestCertificates(limit int) ([]CertificateSummary, error) {
 }
 
 func (m *Model) InitPrintModel() {
-	list, err := findLatestCertificates(5)
+
+	logger.Println("Init print model")
+
+	list, err := FindLatestCertificates(5)
 	if err != nil {
 		logger.Printf("Failed to load certificate list: %v", err)
 		m.PrintList = []CertificateSummary{}
 		return
 	}
+
+	logger.Println("Found", len(list), "certificates for printing")
+
 	m.PrintList = list
 	if m.PrintIndex >= len(m.PrintList) {
 		m.PrintIndex = 0
 	}
+
+	logger.Println("Print index set to", m.PrintIndex, "/", len(m.PrintList)-1)
 }
 
 func (m *Model) UpdatePrintModel(msg tea.Msg) []tea.Cmd {
+
 	cmds := []tea.Cmd{}
 
 	if m.State != STATE_PRINT {
@@ -127,12 +160,15 @@ func (m *Model) UpdatePrintModel(msg tea.Msg) []tea.Cmd {
 			if m.PrevState != STATE_PRINT {
 				break
 			}
+
+			logger.Println("Print list length is", len(m.PrintList))
+
 			if len(m.PrintList) == 0 {
 				break
 			}
 			sel := m.PrintList[m.PrintIndex]
 
-			cert, err := loadCertificate(sel.Path)
+			cert, err := LoadCertificate(sel.Path)
 			if err != nil {
 				logger.Printf("Failed to load certificate %s: %v", sel.Path, err)
 				break
@@ -158,9 +194,12 @@ func (m *Model) UpdatePrintModel(msg tea.Msg) []tea.Cmd {
 }
 
 func (m *Model) ViewPrint() (string, string, string) {
-	//s := m.Styles
+
+	s := m.Styles
 
 	header := "Zertifikat drucken"
+
+	// TODO: use list
 
 	if len(m.PrintList) == 0 {
 		body := "Keine Zertifikate gefunden."
@@ -173,22 +212,26 @@ func (m *Model) ViewPrint() (string, string, string) {
 	fmt.Fprintf(&b, "\n")
 
 	for i, s := range m.PrintList {
-		marker := "  "
-		if i == m.PrintIndex {
-			marker = "> "
-		}
 		label := s.Name
 		if s.Applicant != "" || s.ObjectName != "" {
 			label = fmt.Sprintf("%s - %s (%s)", s.Date.Format("2006-01-02"), s.Applicant, s.ObjectName)
 		} else {
 			label = fmt.Sprintf("%s - %s", s.Date.Format("2006-01-02"), s.Name)
 		}
-		fmt.Fprintf(&b, "%s%s\n", marker, label)
+
+		if i == m.PrintIndex {
+			fmt.Fprintf(&b, "> %s\n", m.Styles.Highlight.Render(label))
+		} else {
+			fmt.Fprintf(&b, "  %s\n", label)
+		}
 	}
 
 	body := lipgloss.JoinVertical(lipgloss.Top, []string{b.String()}...)
 
-	footer := m.appBoundaryView("Navigiere mit Pfeiltasten, Bestätige mit Enter")
+	footer := s.ShortKeyStyle.Inline(true).Render("↑/↓") + " " + s.DescStyle.Inline(true).Render("Navigieren, ")
+	footer += s.ShortKeyStyle.Inline(true).Render("Enter") + " " + s.DescStyle.Inline(true).Render("Auswählen, ")
+	footer += s.ShortKeyStyle.Inline(true).Render("q") + " " + s.DescStyle.Inline(true).Render("Beenden")
+	footer = m.appBoundaryView(footer)
 
 	return header, body, footer
 }
