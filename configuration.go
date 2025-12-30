@@ -354,3 +354,22 @@ func saveConfiguration(path string, config Configuration) error {
 
 	return nil
 }
+
+func (c *Configuration) GetWeightForField(groupKey string, fieldKey string) float32 {
+	for _, group := range c.Evaluation {
+		if group.Key != groupKey && group.Title != groupKey {
+			continue
+		}
+
+		for _, field := range group.Fields {
+			if field.Key == fieldKey {
+				if field.Weight != 0.0 {
+					return field.Weight
+				}
+				return 1.0
+			}
+		}
+	}
+
+	return 1.0
+}

@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	maxWidth         = 80
+	maxWidth         = 120
+	maxHeight        = 20
 	STATE_DATA_ENTRY = "data_entry"
 	STATE_EVALUATION = "evaluation"
 	STATE_SUMMARY    = "summary"
@@ -34,14 +35,17 @@ type Model struct {
 	Lg        *lipgloss.Renderer
 	Styles    *Styles
 	width     int
+	height    int
 
 	applicantName      string
 	objectName         string
+	objectClass        string
 	objectImage        string
 	SortedReviewerKeys []int
 	Reviewers          map[int]*Reviewer
 
 	Cfg        Configuration
+	WallOfFame WallOfFameModel
 	DataEntry  DataEntryModel
 	Evaluation EvaluationModel
 	Summary    SummaryModel
@@ -77,11 +81,13 @@ func InitModel(cfg Configuration) Model {
 		Reviewers:          make(map[int]*Reviewer),
 		Values:             make(map[string]any),
 		width:              maxWidth,
+		height:             maxHeight,
 	}
 
 	m.Styles = NewStyles(m.Lg)
 
 	m.InitMenuModel()
+	m.InitWallOfFameModel()
 	m.InitDataEntryModel()
 	m.InitEvaluationModel()
 	m.InitSummaryModel()
@@ -105,13 +111,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = min(msg.Width, maxWidth) - m.Styles.Base.GetHorizontalFrameSize()
+		m.height = min(msg.Height, maxHeight) - m.Styles.Base.GetVerticalFrameSize()
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Interrupt
-		case "esc", "q":
+		case "esc":
+			m.State = STATE_MENU
+			return m, tea.ClearScreen
+		case "q":
 			if m.State == STATE_SUMMARY {
-				m.CreateCertificate()
+				certificate := m.CreateCertificate()
+				m.SaveCertificateByConvention(*certificate)
+				m.UpdateWallOfFame()
 			}
 			return m, tea.Quit
 		}
@@ -127,6 +139,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, m.UpdatePrintModel(msg)...)
 	cmds = append(cmds, m.UpdateEvaluationModel(msg)...)
 	cmds = append(cmds, m.UpdateSummaryModel(msg)...)
+	cmds = append(cmds, m.UpdateWallOfFameModel(msg)...)
 
 	return m, tea.Batch(cmds...)
 }
@@ -139,6 +152,7 @@ func (m Model) View() string {
 		header        string
 		body          string
 		footer        string
+		rightPane     string
 	)
 
 	if m.State == STATE_MENU {
@@ -161,9 +175,23 @@ func (m Model) View() string {
 		header, body, footer = m.ViewPrint()
 	}
 
+	if m.State == STATE_WALL_OF_FAME {
+		header, body, footer = m.ViewWallOfFame()
+	}
+
 	if len(header) > 0 {
 		currentHeader = "Ceremony Master - " + header
 	}
+
+	leftWidth := lipgloss.Width(body)
+	rightWidth := lipgloss.Width(rightPane)
+	avail := m.width - leftWidth
+	if avail < rightWidth {
+		avail = rightWidth
+	}
+	rightAligned := lipgloss.PlaceHorizontal(avail, lipgloss.Right, rightPane)
+	body = lipgloss.JoinHorizontal(lipgloss.Left, body, rightAligned)
+
 	return s.Base.Render(m.appBoundaryView(currentHeader) + "\n" + body + "\n\n" + footer)
 }
 
