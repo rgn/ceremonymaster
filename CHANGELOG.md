@@ -1,3 +1,17 @@
+## v0.4.0 (2026-01-03)
+
+### Feat
+
+- **certificate.go**: Add wall of fame and add object class to consideration
+
+### Fix
+
+- **wall_of_fame.go**: Fix help rendering
+
+### Refactor
+
+- **main.go**: Centralize reviewer and make order deterministic
+
 ## v0.3.0 (2026-01-03)
 
 ### Feat
