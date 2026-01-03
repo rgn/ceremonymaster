@@ -66,7 +66,7 @@ func (m *Model) InitWallOfFameModel() {
 		wallOfFameList.Title = m.Styles.Highlight.Render("Wall of Fame")
 		// wallOfFameList.SetShowStatusBar(false)
 		// wallOfFameList.SetFilteringEnabled(true)
-		// wallOfFameList.SetShowHelp(false)
+		wallOfFameList.SetShowHelp(false)
 		// wallOfFameList.SetShowPagination(false)
 
 		m.WallOfFame.List = wallOfFameList
@@ -105,8 +105,7 @@ func (m *Model) ViewWallOfFame() (string, string, string) {
 	header := "🏆 Wall of Fame 🏆"
 
 	body := m.WallOfFame.List.View()
-	//footer := m.appBoundaryView(m.WallOfFame.List.Help.View())
-	footer := ""
+	footer := m.appBoundaryView(m.WallOfFame.List.Help.View(m.WallOfFame.List))
 
 	return header, body, footer
 }
