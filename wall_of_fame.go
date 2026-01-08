@@ -21,9 +21,10 @@ import (
 const STATE_WALL_OF_FAME = "wall_of_fame"
 
 type WallOfFameModel struct {
-	List    list.Model
-	HeatMap heatmap.Model
-	Data    WallOfFame
+	List              list.Model
+	HeatMap           heatmap.Model
+	ReviewerHistogram map[string]int
+	Data              WallOfFame
 }
 
 type WallOfFame struct {
@@ -58,7 +59,8 @@ func (m *Model) InitWallOfFameModel() {
 
 	// initialize basic model; heatmap will be configured based on loaded data
 	m.WallOfFame = WallOfFameModel{
-		Data: WallOfFame{},
+		Data:              WallOfFame{},
+		ReviewerHistogram: make(map[string]int),
 	}
 
 	// load persisted data and populate list + heatmap
@@ -178,6 +180,11 @@ func (m *Model) InitWallOfFameModel() {
 		m.WallOfFame.HeatMap.SetXYRange(float64(1), float64(12), float64(2018), float64(2026))
 	}
 
+	if reviewerHistogram, err := BuildReviewerHistogram(); err == nil {
+		logger.Printf("Loaded reviewer histogram with %d reviewers.\n", len(reviewerHistogram))
+		m.WallOfFame.ReviewerHistogram = reviewerHistogram
+	}
+
 	m.WallOfFame.HeatMap.Draw()
 }
 
@@ -222,8 +229,10 @@ func (m *Model) ViewWallOfFame() (string, string, string) {
 
 	// Always render the simple labeled month×year grid for predictable layout
 	hmView := renderSimpleHeatGrid(m.WallOfFame.Data)
-
-	body := lipgloss.JoinVertical(lipgloss.Top, m.WallOfFame.List.View(), hmView)
+	histView := RenderReviewerHistogram(m.WallOfFame.ReviewerHistogram, 20)
+	
+	graphs := lipgloss.JoinHorizontal(lipgloss.Left, hmView, lipgloss.NewStyle().MarginLeft(5).Render(histView))
+	body := lipgloss.JoinVertical(lipgloss.Top, m.WallOfFame.List.View(), graphs)
 
 	footer := m.appBoundaryView(m.WallOfFame.List.Help.View(m.WallOfFame.List))
 
