@@ -146,6 +146,10 @@ func (m *Model) CreateCertificate() *Certificate {
 	return &certificate
 }
 
+func roundToOneDecimal(val float32) float32 {
+	return float32(math.Round(float64(val*10))) / 10
+}
+
 // summarizeEvaluations computes min, max and weighted average for each
 // evaluation field across all reviewers. Results are stored in
 // `m.Summaries[fieldKey]` with keys "min","max","avg","count".
@@ -188,7 +192,7 @@ func (m *Model) SummarizeCertificate(cert Certificate) CertificateSummaryEx {
 	}
 
 	achivedLevel := ""
-	avgResult := avgTotal / float32(len(cert.Questions))
+	avgResult := roundToOneDecimal(avgTotal / float32(len(cert.Questions)))
 
 	for _, level := range m.Cfg.SkillLevels {
 		if avgResult >= level.MinPoints {
