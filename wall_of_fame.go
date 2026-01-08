@@ -41,10 +41,10 @@ type listHelpKeyMap struct {
 }
 
 func (i WallOfFameEntry) Title() string {
-	return i.Applicant + " - " + fmt.Sprintf("%.2f", i.Avg) + " (" + i.Rank + ")"
+	return fmt.Sprintf("%s %.1f für %s", i.Applicant, i.Avg, i.ObjectName)
 }
-func (i WallOfFameEntry) Description() string { return i.ObjectName }
-func (i WallOfFameEntry) FilterValue() string { return i.Applicant }
+func (i WallOfFameEntry) Description() string { return i.Applicant }
+func (i WallOfFameEntry) FilterValue() string { return i.Applicant + "|" + i.ObjectName + "|" + i.ObjectClass }
 
 func (m *Model) InitWallOfFameModel() {
 
@@ -64,10 +64,7 @@ func (m *Model) InitWallOfFameModel() {
 
 		wallOfFameList := list.New(items, list.DefaultDelegate{}, m.width, m.height)
 		wallOfFameList.Title = m.Styles.Highlight.Render("Wall of Fame")
-		// wallOfFameList.SetShowStatusBar(false)
-		// wallOfFameList.SetFilteringEnabled(true)
 		wallOfFameList.SetShowHelp(false)
-		// wallOfFameList.SetShowPagination(false)
 
 		m.WallOfFame.List = wallOfFameList
 	} else {
