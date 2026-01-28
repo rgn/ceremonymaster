@@ -127,22 +127,29 @@ func (m *Model) UpdateSummaryModel(msg tea.Msg) []tea.Cmd {
 	logger.Println("Update summary")
 
 	rows := []table.Row{}
-	m.Summary.Certificate = m.CreateCertificate()
-	summary := m.SummarizeCertificate(*m.Summary.Certificate)
 
-	for title, summaryEntry := range summary.entries {
-		rows = append(rows, table.Row{
-			title,
-			fmt.Sprintf("%.2f", summaryEntry.avg),
-			fmt.Sprintf("%.0f", summaryEntry.min),
-			fmt.Sprintf("%.0f", summaryEntry.max),
-		})
+	if m.Summary.Certificate == nil {
+
+		m.Summary.Certificate = m.CreateCertificate()
+		summary := m.SummarizeCertificate(*m.Summary.Certificate)
+
+		for title, summaryEntry := range summary.entries {
+			rows = append(rows, table.Row{
+				title,
+				fmt.Sprintf("%.2f", summaryEntry.avg),
+				fmt.Sprintf("%.0f", summaryEntry.min),
+				fmt.Sprintf("%.0f", summaryEntry.max),
+			})
+		}
+
+		m.Summary.table.SetRows(rows)
+		m.Summary.level = summary.level
+		m.Summary.avt_total = summary.avg
+		m.Summary.overall_rank, m.Summary.class_rank = summary.GetRanks()
+
+		m.SaveCertificateByConvention(*m.Summary.Certificate)
+		m.UpdateWallOfFame()
 	}
-
-	m.Summary.table.SetRows(rows)
-	m.Summary.level = summary.level
-	m.Summary.avt_total = summary.avg
-	m.Summary.overall_rank, m.Summary.class_rank = summary.GetRanks()
 
 	return cmds
 }

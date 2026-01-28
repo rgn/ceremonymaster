@@ -120,11 +120,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.State = STATE_MENU
 			return m, tea.ClearScreen
 		case "q":
-			if m.State == STATE_SUMMARY {
-				certificate := m.CreateCertificate()
-				m.SaveCertificateByConvention(*certificate)
-				m.UpdateWallOfFame()
-			}
 			return m, tea.Quit
 		}
 	}
